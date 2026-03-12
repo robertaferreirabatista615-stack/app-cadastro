@@ -1,70 +1,74 @@
-from flask import Flask 
-from flask import render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for
 import mysql.connector
 import bcrypt
 import re
 
-
-
 app = Flask(__name__)
- 
- 
-DB_CONFIG = {
-     "host":"localhost",
-     "user":"root",
-     "password":"",
-     "database":"uso pessoal"
-}
-EMAIL_RE = re.compile(r"^[^/s@]=@[^/s@]=\.[^\s@]=$")
- 
-def senha_forte(s: str) -> bool:
-   if len(s) <8:
-        return False
-   if not re.search(r"[A-Za-z]" , s):
-      return False
-   if not re.search(r"\d",s):
-       return False  
-   return True
 
-@app.get("/")
+DB_CONFIG = {
+    "host": "localhost",
+    "user": "root",
+    "password": "12345",
+    "database": "teste"
+}
+
+# Improved Email Regex
+EMAIL_RE = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+
+def senha_forte(s: str) -> bool:
+    if len(s) < 8:
+        return False
+    if not re.search(r"[A-Za-z]", s):
+        return False
+    if not re.search(r"\d", s):
+        return False  
+    return True
+
+@app.route("/")
 def home():
     return render_template("index.html")
 
-@app.post("/register")
+@app.route("/register", methods=["POST"])
 def register():
-    # Recebe dados do FROM (HTML)
-    nome= (request.form.get("nome") or "").strip()
-    email=(request.form.get("email") or "").strip()
-    senha=(request.form.get ("senha") or "").strip()
+    # Receive data from Form
+    # The "or ''" ensures that if .get() returns None, it uses an empty string instead.
+    nome = (request.form.get("nome") or "").strip()
+    email = (request.form.get("email") or "").strip()
+    senha = (request.form.get("senha") or "").strip()
     
+    # Validations
     if len(nome) < 3:
-        return"nome deve ter pelo menos 3 caracteres.", 400
+        return "Nome deve ter pelo menos 3 caracteres.", 400
     if not EMAIL_RE.match(email):
-        return"Emai inválido.", 400
+        return "Email inválido.", 400
     if not senha_forte(senha):
-        return "senha fraca.use 8+ caracteres,com letras e número.", 400
+        return "Senha fraca. Use 8+ caracteres, com letras e números.", 400
         
-    senha=bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt()).decore("utf-8")
+    # Hashing the password correctly
+    hashed_senha = bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
     conn = None
     cur = None
     try:
         conn = mysql.connector.connect(**DB_CONFIG)
-        cur =conn.cursor()
+        cur = conn.cursor()
 
+        # Check if user exists
         cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
         if cur.fetchone():
-            return "Esse email já esta cadastrado.",400
+            return "Esse email já está cadastrado.", 400
+
+        # Insert new user
         cur.execute(
-            "INSERT INTO usuarios(nome,email,senha) VALUES(%s,%s,%s)",
-            (nome,email,senha)
+            "INSERT INTO usuarios (nome, email, senha) VALUES (%s, %s, %s)",
+            (nome, email, hashed_senha)
         )
-        conn.comit()
+        conn.commit() # Fixed typo here
 
         return redirect(url_for("home"))
     
     except mysql.connector.Error as e:
-        return f"erro no bando de dados:{e}", 500
+        return f"Erro no banco de dados: {e}", 500
     finally:
         if cur:
             cur.close()
@@ -73,4 +77,3 @@ def register():
 
 if __name__ == "__main__":
     app.run(debug=True)
- 
